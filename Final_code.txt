@@ -1,0 +1,108 @@
+import numpy as np			// Importing required packages 
+import cv2
+import RPi.GPIO as GPIO			// importing GPIO pins package 
+from time import sleep			//package for delay
+GPIO.setmode(GPIO.BOARD)
+Motor1A = 6				//Motor assignment with perticular pin. 6 is the pin connected to motor named1A		
+Motor1B = 13
+Motor2A = 19
+Motor2B = 26
+GPIO.setup(Motor1A,GPIO.OUT)		//assigning the pins as output pin as output will be given as high or low to drive the motor
+GPIO.setup(Motor1B,GPIO.OUT)
+GPIO.setup(Motor2A,GPIO.OUT)
+GPIO.setup(Motor2B,GPIO.OUT)
+GPIO.output(Motor1A,GPIO.LOW)		//all motor is assigned as level low(0) so that no motor move due to some garbage value
+GPIO.output(Motor1B,GPIO.LOW)
+GPIO.output(Motor2A,GPIO.LOW)
+GPIO.output(Motor2B,GPIO.LOW)
+cap = cv2.VideoCapture(1) 		//defigning the video object. 1 is the no. of the device use. 0 can be put in place of 1 for internal webcam of laptop.
+cap.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 640)		//setting the witdh of the video captured
+cap.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 480)		//setting the hight of the video captured
+img=np.zeros((480,640,3),np.uint8)			//defining a zero image. Image is of 480x640x3 it is a 3D iamge having 3 channel RGB and all the values in the RGB are 0 of unsigned integer of 8 bit. therefor ) is the minimum and 255 is the maximum(2^8).
+for x in range(1,180):					//loop from x=1 to 180 so that we can make aur regions such as left right forward center. This can be changes as per the user requirement
+            cv2.line(img,(x,130),(x,300),(0,255,0),1)	//We are not getting shar image if we directly assign the black(0) so we make a blue image as (0,255,0) --> (GBR) so 255 is for blue so all pixels in 2nd matrix got 255 value therfore pure blue.
+img2gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)		//we convert the blue to gray image inorder to do thresholding. Gray scale is a single dimension matrx having values from 0 to 255. 0 is pure black and 255 is pure white. and middle value in 0 and 255 is the pure gray
+ret, m_l = cv2.threshold(img2gray, 10, 255, cv2.THRESH_BINARY) //Now we threshold by 10 value. so each pixel value in the gray scale having pixel value greater then 10 becomes one other become 0
+img1=np.zeros((480,640,3),np.uint8)
+for x in range(180,400):
+            cv2.line(img1,(x,130),(x,300),(0,255,0),1)
+img2gray1 = cv2.cvtColor(img1,cv2.COLOR_BGR2GRAY)
+ret, m_s = cv2.threshold(img2gray1, 10, 255, cv2.THRESH_BINARY)
+img2=np.zeros((480,640,3),np.uint8)
+for x in range(400,640):
+            cv2.line(img2,(x,130),(x,300),(0,255,0),1)
+img2gray2 = cv2.cvtColor(img2,cv2.COLOR_BGR2GRAY)
+ret, m_r = cv2.threshold(img2gray2, 10, 255, cv2.THRESH_BINARY)
+img3=np.zeros((480,640,3),np.uint8)
+for x in range(180,400):
+            cv2.line(img3,(x,300),(x,480),(0,255,0),1)
+img2gray3 = cv2.cvtColor(img3,cv2.COLOR_BGR2GRAY)		// the captured image in converted to gray. GBR-->Gray. In python a color image has the following sequence GBR where as in matlab they have RGB.
+ret, m_f = cv2.threshold(img2gray3, 10, 255, cv2.THRESH_BINARY) 	//Threshold with 10
+while(True):								//infinite looop
+    ret, frame = cap.read()						//read the frame
+    cv2.waitKey(100)							//delay so that out raspberry pi does not heat much and pi has to work less
+    cv2.imshow('RGB',frame)				
+    b,g,r = cv2.split(frame)						//split the color image in to its sustituent channels which is GBR
+    _,th_b = cv2.threshold(b,50,255,cv2.THRESH_BINARY_INV)		//thresholding the perticuarr channel. here inv means the value greater than threshold will be 0 and less value will be 1
+    _,th_g = cv2.threshold(g,50,255,cv2.THRESH_BINARY_INV)		// we do not convert them into gray because each channel it self is a 1D matrix having values 0-255
+    _,th_r = cv2.threshold(r,50,255,cv2.THRESH_BINARY_INV)
+    #cv2.imshow('t_b',th_b)
+    #cv2.imshow('t_g',th_g)
+    #cv2.imshow('t_r',th_r)
+    c_b=np.count_nonzero(th_b, axis=None)		//counting the no. of 1's
+    c_g=np.count_nonzero(th_g, axis=None)
+    c_r=np.count_nonzero(th_r, axis=None)
+    t_min_t = np.minimum(c_b,c_g)			//minimum 1's so as to find which channel has minimum noise
+    t_min = np.minimum(t_min_t,c_r)
+    if t_min == c_b:
+        final=th_b
+    elif t_min==c_g:
+        final =th_g
+    if t_min==c_r:
+        final =th_r
+    cv2.imshow('final',final)				//final image is the threshold of one of the channel having minimum number of 1's
+    a_l=cv2.bitwise_and(m_l,final)			//logical and operation with the mask		
+    a_s=cv2.bitwise_and(m_s,final)
+    a_r=cv2.bitwise_and(m_r,final)
+    a_f=cv2.bitwise_and(m_f,final)
+    a_l_c=np.count_nonzero(a_l, axis=None)		//again counting the no. of 1's as to get the contration of the white prtion 
+    a_s_c=np.count_nonzero(a_s, axis=None)
+    a_r_c=np.count_nonzero(a_r, axis=None)
+    a_f_c=np.count_nonzero(a_f, axis=None)
+    a_max1 = np.maximum(a_l_c,a_s_c)			//finding maximum of between all the aquired images after anding from the mask
+    a_max2 = np.maximum(a_r_c,a_f_c)
+    a_max=np.maximum(a_max1,a_max2)
+    if a_max==a_l_c:							// finding which mask multiplication give the result
+        cv2.imshow('Result',m_l)				
+        print "LEFT"
+        GPIO.output(Motor1A,GPIO.HIGH)
+		GPIO.output(Motor1B,GPIO.LOW)
+		GPIO.output(Motor2A,GPIO.LOW)
+		GPIO.output(Motor2B,GPIO.LOW)
+        cv2.destroyWindow('LEFT')
+    elif a_max==a_s_c:
+        cv2.imshow('Result',m_s)
+        GPIO.output(Motor1A,GPIO.LOW)
+		GPIO.output(Motor1B,GPIO.LOW)
+		GPIO.output(Motor2A,GPIO.LOW)			//driving motors
+		GPIO.output(Motor2B,GPIO.LOW)
+        print "STOP"
+        cv2.destroyWindow('STOP')
+    elif a_max==a_r_c:
+        cv2.imshow('Result',m_r)
+        print "RIGHT"
+        GPIO.output(Motor1A,GPIO.LOW)
+		GPIO.output(Motor1B,GPIO.LOW)
+		GPIO.output(Motor2A,GPIO.HIGH)
+		GPIO.output(Motor2B,GPIO.LOW)
+        cv2.destroyWindow('RIGHT')
+    elif a_max==a_f_c:
+        cv2.imshow('Result',m_f)
+        print "FORWARD"
+        GPIO.output(Motor1A,GPIO.HIGH)
+		GPIO.output(Motor1B,GPIO.LOW)
+		GPIO.output(Motor2A,GPIO.HIGH)
+		GPIO.output(Motor2B,GPIO.LOW)
+        cv2.destroyWindow('FORWARD')
+cap.release()					//releasing all the roaming data
+cv2.destroyAllWindows()				//closing al windows
